@@ -105,7 +105,7 @@ for(const x of [-.9,.9])for(const z of [-1.06,1.06]){
   const ring=new THREE.Mesh(new THREE.TorusGeometry(.22,.025,6,18),trim);ring.rotation.y=Math.PI/2;ring.position.set(x<0?-.917:.917,.43,z);g.add(ring);
 }
 g.scale.setScalar(.9);return g}
-function buildRide(){if(rideRoot){scene.remove(rideRoot);disposeTree(rideRoot)}rideRoot=new THREE.Group();activeRide=rides.find(r=>r.id===profile.selectedRide)||rides[0];rideModel=activeRide.kind==='bike'?buildBike(rideRoot,activeRide.color):buildCar(rideRoot,activeRide.color);scene.add(rideRoot);$('bikeName').textContent=activeRide.name.toUpperCase()}
+function buildRide(){if(rideRoot){scene.remove(rideRoot);disposeTree(rideRoot)}rideRoot=new THREE.Group();activeRide=rides.find(r=>r.id===profile.selectedRide)||rides[0];rideModel=activeRide.kind==='bike'?buildBike(rideRoot,activeRide.color):buildCar(rideRoot,activeRide.color);rideRoot.add(rideModel);rideRoot.visible=true;rideModel.visible=true;scene.add(rideRoot);$('bikeName').textContent=activeRide.name.toUpperCase()}
 function addTrackProps(){
   const s=sampleAt(0),gate=new THREE.Group();
   gate.position.set(s.pos.x,0,s.pos.z);gate.rotation.y=Math.atan2(s.tangent.x,s.tangent.z)+Math.PI;
