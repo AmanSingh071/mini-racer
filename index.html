@@ -1,0 +1,108 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#10151d">
+<title>Mini Racer — Arcade Rush</title>
+<style>
+:root{color-scheme:dark;--bg:#10151d;--panel:#171f2a;--muted:#98a8b9;--lime:#b8ff5c;--red:#ff5964}
+*{box-sizing:border-box}body{margin:0;min-height:100vh;background:radial-gradient(ellipse at top,#202d3b 0,#10151d 58%);color:#f4f7fb;font:16px/1.45 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;display:grid;place-items:center;padding:22px}
+.app{width:min(100%,900px)}header{display:flex;align-items:center;justify-content:space-between;gap:14px;margin-bottom:16px}.brand{display:flex;align-items:center;gap:12px}.logo{width:46px;height:46px;display:grid;place-items:center;background:var(--lime);color:#111;border-radius:13px;font-size:25px;box-shadow:0 0 28px #b8ff5c30}h1{font-size:clamp(22px,4vw,32px);letter-spacing:-1px;margin:0}header p{margin:2px 0 0;color:var(--muted);font-size:13px}.pill{border:1px solid #ffffff20;border-radius:99px;padding:7px 12px;color:#cbd5e1;font-size:12px;white-space:nowrap}
+.layout{display:grid;grid-template-columns:minmax(0,1fr) 220px;gap:16px;align-items:stretch}.game-shell{position:relative;overflow:hidden;border:1px solid #ffffff20;border-radius:20px;background:#111;box-shadow:0 22px 65px #0005;min-height:360px}canvas{display:block;width:100%;height:auto;max-height:72vh;object-fit:contain;touch-action:none}.overlay{position:absolute;inset:0;display:grid;place-items:center;padding:20px;background:#091019b8;backdrop-filter:blur(4px);text-align:center}.overlay.hidden{display:none}.modal{max-width:320px}.eyebrow{font-size:11px;letter-spacing:3px;color:var(--lime);font-weight:800}.modal h2{font-size:clamp(30px,5vw,44px);line-height:1.05;letter-spacing:-1.5px;margin:9px 0}.modal p{color:#c4ced9;font-size:14px;margin:10px 0 20px}.primary{border:0;border-radius:12px;background:var(--lime);color:#10150d;font-weight:900;padding:13px 24px;font-size:15px;cursor:pointer;box-shadow:0 7px 25px #b8ff5c25}.primary:hover{filter:brightness(1.08);transform:translateY(-1px)}button:focus-visible{outline:3px solid white;outline-offset:3px}
+.side{display:flex;flex-direction:column;gap:12px}.stat{background:linear-gradient(140deg,#1b2633,#151c26);border:1px solid #ffffff12;border-radius:16px;padding:16px}.label{font-size:11px;letter-spacing:1.5px;color:var(--muted);font-weight:800}.value{font-size:30px;font-weight:850;letter-spacing:-1px;margin-top:3px;font-variant-numeric:tabular-nums}.unit{font-size:12px;color:var(--muted);font-weight:500}.help{padding:15px}.help h3{font-size:13px;margin:0 0 10px}.keyrow{display:flex;align-items:center;gap:8px;margin:8px 0;color:#c6d0db;font-size:12px}.key{display:inline-grid;place-items:center;min-width:27px;height:25px;border:1px solid #ffffff2c;border-bottom-width:3px;border-radius:6px;font-size:11px;font-weight:800;color:white}.tip{color:var(--muted);font-size:12px;margin-top:auto;padding:5px}
+.mobile-controls{display:none;grid-template-columns:1fr 1fr;gap:12px;margin-top:12px}.control{border:1px solid #ffffff24;border-radius:13px;background:#1a2531;color:white;padding:13px;font-weight:800;font-size:15px;touch-action:manipulation}
+footer{text-align:center;color:#6f7f90;font-size:11px;margin-top:16px}
+@media(max-width:650px){body{padding:14px}.layout{grid-template-columns:1fr}.side{display:grid;grid-template-columns:1fr 1fr}.help{grid-column:1/-1}.tip{grid-column:1/-1}.game-shell{min-height:0}canvas{max-height:none}.mobile-controls{display:grid}.pill{display:none}.stat{padding:12px}.value{font-size:25px}}
+</style>
+</head>
+<body>
+<main class="app">
+<header><div class="brand"><div class="logo" aria-hidden="true">🏎</div><div><h1>MINI RACER</h1><p>ARCADE RUSH · DODGE. SURVIVE. BEAT YOUR BEST.</p></div></div><div class="pill">● OFFLINE READY · NO DOWNLOAD</div></header>
+<div class="layout">
+<section>
+<div class="game-shell">
+<canvas id="game" width="480" height="720" aria-label="Racing game. Move your car left and right to avoid traffic."></canvas>
+<div class="overlay" id="overlay"><div class="modal"><div class="eyebrow" id="eyebrow">READY, DRIVER?</div><h2 id="headline">Own the<br>road.</h2><p id="message">Dodge traffic, keep your speed up, and chase a new high score.</p><button class="primary" id="start">START ENGINE ↗</button></div></div>
+</div>
+<div class="mobile-controls"><button class="control" id="left" aria-label="Steer left">← STEER LEFT</button><button class="control" id="right" aria-label="Steer right">STEER RIGHT →</button></div>
+</section>
+<aside class="side">
+<div class="stat"><div class="label">SCORE</div><div class="value" id="score">00000</div></div>
+<div class="stat"><div class="label">BEST RUN</div><div class="value" id="best">00000</div></div>
+<div class="stat"><div class="label">SPEED</div><div class="value"><span id="speed">0</span> <span class="unit">KM/H</span></div></div>
+<div class="stat help"><h3>HOW TO DRIVE</h3><div class="keyrow"><span class="key">←</span><span class="key">A</span> Steer left</div><div class="keyrow"><span class="key">→</span><span class="key">D</span> Steer right</div><div class="keyrow"><span class="key">P</span> Pause / resume</div><div class="keyrow"><span class="key">↵</span> Start / restart</div></div>
+<div class="tip">💡 Tip: Watch the gaps. Speed increases as your score grows.</div>
+</aside>
+</div>
+<footer>MINI RACER · MADE FOR THE OPEN ROAD · YOUR BEST SCORE STAYS ON THIS DEVICE</footer>
+</main>
+<script>
+(() => {
+const canvas = document.getElementById('game'), ctx = canvas.getContext('2d');
+const overlay = document.getElementById('overlay'), startBtn = document.getElementById('start');
+const scoreEl = document.getElementById('score'), bestEl = document.getElementById('best'), speedEl = document.getElementById('speed');
+const W=canvas.width,H=canvas.height, road={x:78,w:324}, lanes=3, laneW=108;
+const colors=['#ff626d','#ffc857','#59c7ff','#bd8cff','#f2f4f8'];
+let state='ready', player, traffic=[], score=0, best=0, speed=280, roadOffset=0, spawnTimer=0, lastTime=0, raf=0, keys=new Set(), particles=[];
+try{best=Number(localStorage.getItem('miniRacerBest')||0)}catch{} bestEl.textContent=fmt(best);
+function fmt(n){return Math.floor(n).toString().padStart(5,'0')}
+function reset(){player={x:W/2-22,y:H-142,w:44,h:76,move:0};traffic=[];particles=[];score=0;speed=280;roadOffset=0;spawnTimer=0;lastTime=0;scoreEl.textContent=fmt(0);speedEl.textContent='0'}
+function showOverlay(eyebrow,title,message,button){document.getElementById('eyebrow').textContent=eyebrow;document.getElementById('headline').innerHTML=title;document.getElementById('message').textContent=message;startBtn.textContent=button;overlay.classList.remove('hidden')}
+function start(){reset();state='playing';overlay.classList.add('hidden');lastTime=performance.now();cancelAnimationFrame(raf);raf=requestAnimationFrame(loop)}
+function end(){state='over';if(score>best){best=score;bestEl.textContent=fmt(best);try{localStorage.setItem('miniRacerBest',String(best))}catch{}}
+showOverlay('RACE OVER','That was a<br>close one.','Score: '+fmt(score)+' · Best: '+fmt(best)+'. One more run?','RACE AGAIN ↻')}
+function togglePause(){if(state==='playing'){state='paused';showOverlay('PIT STOP','Take a<br>breather.','Your race is paused. Ready when you are.','RESUME RACE ▶')}else if(state==='paused'){state='playing';overlay.classList.add('hidden');lastTime=performance.now();raf=requestAnimationFrame(loop)}}
+function roundedRect(x,y,w,h,r,fill){ctx.fillStyle=fill;ctx.beginPath();ctx.roundRect(x,y,w,h,r);ctx.fill()}
+function car(x,y,w,h,color,playerCar=false){
+  // soft shadow, body, windscreen and lights
+  ctx.fillStyle='#0007';ctx.beginPath();ctx.ellipse(x+w/2,y+h*.55,w*.7,h*.56,0,0,Math.PI*2);ctx.fill();
+  roundedRect(x,y,w,h,10,color);
+  roundedRect(x+5,y+12,w-10,h*.29,7,playerCar?'#bdeaff':'#273a4a');
+  roundedRect(x+7,y+h*.49,w-14,h*.19,5,playerCar?'#263746':'#d7e1e9');
+  roundedRect(x+4,y+5,7,12,3,'#eaf8ff');roundedRect(x+w-11,y+5,7,12,3,'#eaf8ff');
+  roundedRect(x+3,y+h-15,7,9,2,'#ff455b');roundedRect(x+w-10,y+h-15,7,9,2,'#ff455b');
+  roundedRect(x-3,y+14,5,18,2,'#171b20');roundedRect(x+w-2,y+14,5,18,2,'#171b20');
+  if(playerCar){roundedRect(x+w/2-3,y+30,6,19,3,'#b8ff5c');}
+}
+function drawRoad(dt){
+  ctx.fillStyle='#18352d';ctx.fillRect(0,0,W,H);
+  // roadside grass stripes
+  for(let y=-80+(roadOffset*.6%80);y<H;y+=80){ctx.fillStyle='#204638';ctx.fillRect(18,y,42,34);ctx.fillRect(W-60,y,42,34)}
+  ctx.fillStyle='#252d37';ctx.fillRect(road.x,0,road.w,H);
+  ctx.fillStyle='#d9e0e6';ctx.fillRect(road.x,0,5,H);ctx.fillRect(road.x+road.w-5,0,5,H);
+  // red-white rumble strips
+  for(let y=-38+(roadOffset%76);y<H;y+=76){ctx.fillStyle='#ff626d';ctx.fillRect(road.x-7,y,7,38);ctx.fillRect(road.x+road.w,y,7,38);ctx.fillStyle='#f5f5f5';ctx.fillRect(road.x-7,y+38,7,38);ctx.fillRect(road.x+road.w,y+38,7,38)}
+  ctx.strokeStyle='#e5eaf0a8';ctx.lineWidth=4;ctx.setLineDash([34,32]);ctx.lineDashOffset=-roadOffset;for(let i=1;i<lanes;i++){ctx.beginPath();ctx.moveTo(road.x+i*laneW,0);ctx.lineTo(road.x+i*laneW,H);ctx.stroke()}ctx.setLineDash([]);
+}
+function spawnCar(){const lane=Math.floor(Math.random()*lanes);const x=road.x+lane*laneW+laneW/2-20;
+ if(traffic.some(c=>Math.abs(c.x-x)<laneW/2&&c.y<180))return;
+ traffic.push({x,y:-95,w:40,h:70,color:colors[Math.floor(Math.random()*colors.length)],extra:Math.random()*65});
+}
+function collide(a,b){const pad=9;return a.x+pad<b.x+b.w-pad&&a.x+a.w-pad>b.x+pad&&a.y+pad<b.y+b.h-pad&&a.y+a.h-pad>b.y+pad}
+function draw(){
+ drawRoad(0);traffic.forEach(c=>car(c.x,c.y,c.w,c.h,c.color));if(player)car(player.x,player.y,player.w,player.h,'#b8ff5c',true);
+ // subtle HUD glow
+ const grad=ctx.createLinearGradient(0,0,0,90);grad.addColorStop(0,'#0005');grad.addColorStop(1,'#0000');ctx.fillStyle=grad;ctx.fillRect(0,0,W,90);
+ ctx.fillStyle='#ffffffb8';ctx.font='800 12px system-ui';ctx.fillText('RACE  /  '+(state==='playing'?'LIVE':state.toUpperCase()),20,28);
+}
+function loop(now){if(state!=='playing')return;const dt=Math.min((now-lastTime)/1000,.035);lastTime=now;
+ const steer=(keys.has('ArrowLeft')||keys.has('a')||keys.has('A')?-1:0)+(keys.has('ArrowRight')||keys.has('d')||keys.has('D')?1:0);
+ player.x+=steer*300*dt;player.x=Math.max(road.x+10,Math.min(road.x+road.w-player.w-10,player.x));
+ speed=Math.min(680,280+score*.12);roadOffset=(roadOffset+speed*dt)%10000;spawnTimer+=dt;
+ if(spawnTimer>Math.max(.48,1.05-score/1800)){spawnTimer=0;spawnCar()}
+ for(let i=traffic.length-1;i>=0;i--){const c=traffic[i];c.y+=(speed+c.extra)*dt;if(collide(player,c)){draw();end();return}if(c.y>H+100){traffic.splice(i,1);score+=10}}
+ score+=dt*3;scoreEl.textContent=fmt(score);speedEl.textContent=Math.round(speed/4);draw();raf=requestAnimationFrame(loop)}
+function idleLoop(){if(state==='playing')return;draw();raf=requestAnimationFrame(idleLoop)}
+startBtn.addEventListener('click',()=>{if(state==='paused'){togglePause()}else start()});
+document.addEventListener('keydown',e=>{if(['ArrowLeft','ArrowRight',' '].includes(e.key))e.preventDefault();keys.add(e.key);if(e.repeat)return;if(e.key==='Enter'&&(state==='ready'||state==='over'))start();else if((e.key==='p'||e.key==='P'||e.key==='Escape')&&(state==='playing'||state==='paused'))togglePause();});
+document.addEventListener('keyup',e=>keys.delete(e.key));window.addEventListener('blur',()=>keys.clear());
+function holdButton(id,key){const el=document.getElementById(id);const down=e=>{e.preventDefault();keys.add(key)};const up=e=>{e.preventDefault();keys.delete(key)};el.addEventListener('pointerdown',down);el.addEventListener('pointerup',up);el.addEventListener('pointercancel',up);el.addEventListener('pointerleave',up)}
+holdButton('left','ArrowLeft');holdButton('right','ArrowRight');
+canvas.addEventListener('pointerdown',e=>{if(state!=='playing')return;const r=canvas.getBoundingClientRect();const x=(e.clientX-r.left)/r.width*W;keys.add(x<W/2?'ArrowLeft':'ArrowRight');canvas.setPointerCapture(e.pointerId)});
+canvas.addEventListener('pointerup',()=>{keys.delete('ArrowLeft');keys.delete('ArrowRight')});canvas.addEventListener('pointercancel',()=>{keys.delete('ArrowLeft');keys.delete('ArrowRight')});
+reset();player={x:W/2-22,y:H-142,w:44,h:76};draw();
+})();
+</script>
+</body>
+</html>
