@@ -227,28 +227,6 @@ function buildTrack(){
 function disposeTree(obj){obj.traverse(o=>{if(o.geometry)o.geometry.dispose();if(o.material){if(Array.isArray(o.material))o.material.forEach(m=>m.dispose());else o.material.dispose()}})}
 function addBox(parent,w,h,d,color,x,y,z,round=false){const mesh=new THREE.Mesh(new THREE.BoxGeometry(w,h,d),mat(color,.42,.2));mesh.position.set(x,y,z);mesh.castShadow=true;mesh.receiveShadow=true;parent.add(mesh);return mesh}
 function orientRide(s){if(!rideRoot||!s)return;rideRoot.rotation.y=Math.atan2(s.tangent.x,s.tangent.z)+Math.PI}
-function buildBike(parent,color){const g=new THREE.Group(),frame=mat(color,.32,.55),rubber=mat(0x11151b,.92),metal=mat(0x9ca9b8,.3,.8),glass=mat(0x203d51,.18,.5,0x062338);function cyl(rad,len,material,x,y,z,rot=0){const m=new THREE.Mesh(new THREE.CylinderGeometry(rad,rad,len,16),material);m.rotation.z=Math.PI/2;m.rotation.y=rot;m.position.set(x,y,z);m.castShadow=true;g.add(m);return m}
-for(const z of [-1.03,1.05]){const wheel=new THREE.Mesh(new THREE.TorusGeometry(.39,.105,10,20),rubber);wheel.rotation.y=Math.PI/2;wheel.position.set(0,.47,z);wheel.castShadow=true;g.add(wheel);const hub=new THREE.Mesh(new THREE.CylinderGeometry(.15,.15,.13,14),metal);hub.rotation.z=Math.PI/2;hub.position.set(0,.47,z);g.add(hub)}
-cyl(.08,1.15,metal,0,.65,-.5);addBox(g,.42,.35,.8,color,0,.91,.12);addBox(g,.34,.19,.72,0x161c26,0,1.13,.18);const tank=new THREE.Mesh(new THREE.SphereGeometry(.32,16,12),frame);tank.scale.set(.75,.55,1.1);tank.position.set(0,1.22,-.1);g.add(tank);addBox(g,.42,.12,.5,0x10151d,0,1.48,.42);const fork=addBox(g,.08,.64,.1,metal,0,.75,-.82);fork.rotation.x=-.18;addBox(g,.6,.08,.14,metal,0,1.27,-.98);const head=new THREE.Mesh(new THREE.SphereGeometry(.17,12,8),mat(0xe8faff,.25,.2,0x7ddfff));head.position.set(0,1.25,-.9);g.add(head);
-// Rider, helmet and arms
-addBox(g,.37,.58,.34,0x202d3d,0,1.72,.18).rotation.x=-.22;const helmet=new THREE.Mesh(new THREE.SphereGeometry(.22,16,12),mat(0xf0f4f8,.25,.35));helmet.position.set(0,2.1,-.02);g.add(helmet);addBox(g,.3,.1,.08,0x172a39,0,2.08,-.19);const arm1=addBox(g,.11,.48,.12,0x35475b,-.27,1.77,-.24);arm1.rotation.x=-.55;arm1.rotation.z=-.4;const arm2=addBox(g,.11,.48,.12,0x35475b,.27,1.77,-.24);arm2.rotation.x=-.55;arm2.rotation.z=.4;addBox(g,.16,.12,.32,0x121820,0,.8,.7);g.scale.setScalar(1.05);return g}
-function buildCar(parent,color){const g=new THREE.Group(),rubber=mat(0x090c11,.92),trim=mat(0xeaf7ff,.25,.38,0x4abfff);
-addBox(g,1.72,.49,3.2,color,0,.72,0);
-addBox(g,1.42,.58,1.62,0x172b3c,0,1.17,.12);
-addBox(g,1.22,.39,1.26,0x3b7187,0,1.27,-.02);
-addBox(g,1.34,.11,1.08,0x182c3a,0,1.46,.19);
-addBox(g,1.76,.16,.48,0x111923,0,.51,-1.18);addBox(g,1.48,.13,.34,0x111923,0,.52,1.59);
-addBox(g,1.36,.11,.14,0xfff2c2,0,.86,-1.61);addBox(g,.28,.12,.10,0xffffff,-.53,.87,-1.66);addBox(g,.28,.12,.10,0xffffff,.53,.87,-1.66);
-addBox(g,1.42,.10,.14,0xff3556,0,.79,1.65);
-addBox(g,.04,.09,2.0,0xd9f6ff,-.865,.72,.02);addBox(g,.04,.09,2.0,0xd9f6ff,.865,.72,.02);
-addBox(g,1.15,.09,.16,0x10151d,0,1.22,1.49);addBox(g,.12,.3,.12,0x10151d,-.46,1.09,1.49);addBox(g,.12,.3,.12,0x10151d,.46,1.09,1.49);
-const stripe=new THREE.Mesh(new THREE.BoxGeometry(.18,.035,1.3),trim);stripe.position.set(0,1.53,.1);g.add(stripe);
-for(const x of [-.9,.9])for(const z of [-1.06,1.06]){
-  const w=new THREE.Mesh(new THREE.CylinderGeometry(.37,.37,.23,20),rubber);w.rotation.z=Math.PI/2;w.position.set(x,.43,z);w.castShadow=true;g.add(w);
-  const hub=new THREE.Mesh(new THREE.CylinderGeometry(.19,.19,.25,16),mat(0xcbd7e2,.22,.82));hub.rotation.z=Math.PI/2;hub.position.set(x,.43,z);g.add(hub);
-  const ring=new THREE.Mesh(new THREE.TorusGeometry(.22,.025,6,18),trim);ring.rotation.y=Math.PI/2;ring.position.set(x<0?-.917:.917,.43,z);g.add(ring);
-}
-g.scale.setScalar(.9);return g}
 function paintMaterial(color){
  return new THREE.MeshPhysicalMaterial({color,metalness:.58,roughness:.24,clearcoat:1,clearcoatRoughness:.16});
 }
@@ -542,7 +520,6 @@ function formatTime(ms){if(!Number.isFinite(ms)||ms<0)return'--:--';const s=ms/1
 function paintRide(color){if(!rideModel)return;rideModel.traverse(o=>{if(!o.isMesh||!o.userData.paintable||!o.material)return;const arr=Array.isArray(o.material)?o.material:[o.material];arr.forEach(m=>{if(m.color)m.color.set(color)})});if($('paintToggle'))$('paintToggle').textContent='🎨 '+PAINT_NAMES[paintIndex]}
 function cyclePaint(){paintIndex=(paintIndex+1)%PAINT_COLORS.length;paintRide(PAINT_COLORS[paintIndex]);toast('PAINT · '+PAINT_NAMES[paintIndex])}
 function addVehicleLights(){vehicleLights=[];if(!rideRoot)return;const xs=activeRide.kind==='bike'?[0]:[-.58,.58];for(const x of xs){const light=new THREE.PointLight(0xdaf0ff,0,28,2);light.position.set(x,.92,-1.55);rideRoot.add(light);vehicleLights.push(light)}applyWorldMode()}
-function ensureRideVisible(){if(!rideRoot)return;if(!rideModel||vehicleMeshCount(rideModel)<12){if(rideModel){rideRoot.remove(rideModel);disposeTree(rideModel)}rideWheels=[];const color=PAINT_COLORS[paintIndex];rideModel=activeRide.kind==='bike'?buildBike(rideRoot,color,true):buildCar(rideRoot,color,true);rideRoot.add(rideModel)}rideRoot.visible=true;rideModel.visible=true;rideModel.traverse(o=>{if(o.isMesh){o.visible=true;if(!o.material)o.material=mat(0xd7e4ec,.55,.2);if(o.material&&o.material.opacity===0)o.material.opacity=1}})}
 function applyWorldMode(){
  const names=['DAY','RAIN','NIGHT'],bg=[0x8ea5ae,0x566570,0x030814],fog=[0x9aa5aa,0x53616d,0x030814],sun=[2.35,.82,.10],hemi=[1.55,.95,.24],fill=[.42,.5,.22];
  if(scene){scene.background=worldMode===0?(hdrBackground||new THREE.Color(bg[0])):new THREE.Color(bg[worldMode]);if(scene.fog)scene.fog.color.set(fog[worldMode])}
