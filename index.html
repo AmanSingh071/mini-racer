@@ -390,20 +390,24 @@ function buildOpponents(){
   for(const spec of specs){
     const root=new THREE.Group(),model=buildCar(root,spec.color,false);
     root.add(model);root.visible=true;scene.add(root);
-    opponents.push({...spec,root,model,dist:-spec.gap,velocity:0});
+    opponents.push({...spec,root,model,dist:-spec.gap,velocity:0,baseLane:spec.lane,laneTarget:spec.lane,laneTimer:2+Math.random()*2,nearMissed:false,collisionCooldown:0});
   }
   updateOpponentPositions(0);
 }
 function updateOpponentPositions(dt=0){
-  for(const o of opponents){
-    if(dt>0){o.velocity=Math.min(o.maxSpeed,o.velocity+o.accel*dt);o.dist+=o.velocity*dt}
-    const s=sampleAt(o.dist),p=s.pos.clone().addScaledVector(s.normal,o.lane);
-    o.root.position.set(p.x,.22,p.z);o.root.rotation.y=Math.atan2(s.tangent.x,s.tangent.z)+Math.PI;
+ for(const o of opponents){
+  if(dt>0){
+   o.velocity=Math.min(o.maxSpeed,o.velocity+o.accel*dt);o.dist+=o.velocity*dt;
+   o.laneTimer-=dt;if(o.laneTimer<=0){const choices=[-2.45,0,2.45].filter(x=>Math.abs(x-o.lane)>.6);o.laneTarget=choices[Math.floor(Math.random()*choices.length)];o.laneTimer=2.2+Math.random()*2.2}
+   o.lane+=(o.laneTarget-o.lane)*Math.min(1,dt*1.25);o.collisionCooldown=Math.max(0,(o.collisionCooldown||0)-dt);
   }
+  const s=sampleAt(o.dist),p=s.pos.clone().addScaledVector(s.normal,o.lane);
+  o.root.position.set(p.x,.22,p.z);o.root.rotation.y=Math.atan2(s.tangent.x,s.tangent.z)+Math.PI;
+ }
 }
 function resetOpponents(){
-  for(const o of opponents){o.dist=-o.gap;o.velocity=0;o.root.visible=true}
-  updateOpponentPositions(0);
+ for(const o of opponents){o.dist=-o.gap;o.velocity=0;o.lane=o.baseLane;o.laneTarget=o.baseLane;o.laneTimer=2+Math.random()*2;o.nearMissed=false;o.collisionCooldown=0;o.root.visible=true}
+ updateOpponentPositions(0);
 }
 function addTrackProps(){
   const s=sampleAt(0),gate=new THREE.Group();
@@ -518,7 +522,28 @@ function makeHazard(d,lane){
   g.position.set(p.x,0,p.z);g.rotation.y=Math.atan2(s.tangent.x,s.tangent.z);
   scene.add(g);hazards.push({mesh:g,active:true,lane,width:3.25});
 }
-function populate(){coins.forEach(o=>scene.remove(o.mesh));hazards.forEach(o=>scene.remove(o.mesh));coins=[];hazards=[];for(let i=0;i<30;i++)makeCoin((i+1)*trackLength/32,[-2.8,0,2.8][i%3]);for(let i=0;i<5;i++)makeHazard((i+1.15)*trackLength/6.5,i%2===0?-2.8:2.8)}
+function makePowerup(dist,lane,type){
+ const s=sampleAt(dist),g=new THREE.Group(),colors={shield:0x60e9ff,magnet:0xff65d6,overdrive:0xffb33e},color=colors[type]||0x60e9ff;
+ const halo=new THREE.Mesh(new THREE.TorusGeometry(.52,.085,10,24),new THREE.MeshStandardMaterial({color,metalness:.45,roughness:.22,emissive:color,emissiveIntensity:.75}));halo.rotation.x=Math.PI/2;g.add(halo);
+ const core=new THREE.Mesh(new THREE.OctahedronGeometry(.39,1),new THREE.MeshPhysicalMaterial({color,metalness:.35,roughness:.18,emissive:color,emissiveIntensity:.8,clearcoat:1}));core.position.y=.12;g.add(core);
+ const p=s.pos.clone().addScaledVector(s.normal,lane);g.position.set(p.x,1.25,p.z);scene.add(g);powerups.push({mesh:g,type,active:true,baseY:1.25});
+}
+function makeBoostPad(dist,lane){
+ const s=sampleAt(dist),p=s.pos.clone().addScaledVector(s.normal,lane),g=new THREE.Group();
+ const matGlow=new THREE.MeshStandardMaterial({color:0x20e8ff,metalness:.35,roughness:.2,emissive:0x0089bd,emissiveIntensity:1.2});
+ const base=new THREE.Mesh(new THREE.BoxGeometry(2.55,.08,3.3),mat(0x162c38,.45,.35));base.position.y=.09;g.add(base);
+ for(let i=0;i<3;i++){const arrow=new THREE.Mesh(new THREE.ConeGeometry(.3,.75,3),matGlow);arrow.rotation.x=-Math.PI/2;arrow.position.set(0,.17,-.8+i*.8);g.add(arrow)}
+ g.position.set(p.x,0,p.z);g.rotation.y=Math.atan2(s.tangent.x,s.tangent.z);scene.add(g);boostPads.push({mesh:g,dist,lane,active:true});
+}
+function populate(){
+ coins.forEach(o=>{scene.remove(o.mesh);disposeTree(o.mesh)});hazards.forEach(o=>{scene.remove(o.mesh);disposeTree(o.mesh)});
+ powerups.forEach(o=>{scene.remove(o.mesh);disposeTree(o.mesh)});boostPads.forEach(o=>{scene.remove(o.mesh);disposeTree(o.mesh)});
+ coins=[];hazards=[];powerups=[];boostPads=[];
+ for(let i=0;i<30;i++)makeCoin((i+1)*trackLength/32,[-2.8,0,2.8][i%3]);
+ for(let i=0;i<5;i++)makeHazard((i+1.15)*trackLength/6.5,i%2===0?-2.8:2.8);
+ makePowerup(trackLength*.13,0,'magnet');makePowerup(trackLength*.43,-1.8,'shield');makePowerup(trackLength*.72,1.8,'overdrive');
+ makeBoostPad(trackLength*.27,-1.55);makeBoostPad(trackLength*.59,1.55);makeBoostPad(trackLength*.9,0);
+}
 function toast(text){$('toast').textContent=text;$('toast').classList.add('show');toastTimer=1.2}
 function formatTime(ms){if(!Number.isFinite(ms)||ms<0)return'--:--';const s=ms/1000;return String(Math.floor(s/60)).padStart(2,'0')+':'+String(Math.floor(s%60)).padStart(2,'0')+'.'+String(Math.floor((s%1)*100)).padStart(2,'0')}
 function paintRide(color){if(!rideModel)return;rideModel.traverse(o=>{if(!o.isMesh||!o.userData.paintable||!o.material)return;const arr=Array.isArray(o.material)?o.material:[o.material];arr.forEach(m=>{if(m.color)m.color.set(color)})});if($('paintToggle'))$('paintToggle').textContent='🎨 '+PAINT_NAMES[paintIndex]}
@@ -539,10 +564,8 @@ function cycleWorldMode(){worldMode=(worldMode+1)%3;applyWorldMode();toast('WORL
 function cycleCameraMode(){cameraMode=(cameraMode+1)%3;if($('cameraToggle'))$('cameraToggle').textContent='📷 CAM: '+['CHASE','HOOD','CINEMA'][cameraMode];toast('CAMERA · '+['CHASE','HOOD','CINEMA'][cameraMode])}
 function activateShield(){if(state!=='racing')return;if(shieldTimer>0){toast('SHIELD ACTIVE');return}if(nitro<18){toast('NEED 18 NITRO');return}nitro-=18;shieldTimer=3.5;toast('SHIELD ON · 3.5s');sound(640,.1)}
 function activateMagnet(){if(state!=='racing')return;if(magnetTimer>0){toast('MAGNET ACTIVE');return}if(nitro<20){toast('NEED 20 NITRO');return}nitro-=20;magnetTimer=7;toast('COIN MAGNET · 7s');sound(720,.1)}
-function recordChallengeProgress(amount){
- if(challengeClaimedToday||dailyChallenge.id==='clean'&&amount!==1)return;
- const applies=(dailyChallenge.id==='coins'&&amount===1)||(dailyChallenge.id==='drift'&&amount>0)||(dailyChallenge.id==='clean'&&amount===1);
- if(!applies)return;
+function recordChallengeProgress(kind,amount=1){
+ if(challengeClaimedToday||dailyChallenge.id!==kind)return;
  challengeProgress=Math.min(dailyChallenge.goal,challengeProgress+amount);
  if(challengeProgress>=dailyChallenge.goal){challengeClaimedToday=true;profile.coins+=dailyChallenge.reward;profile.xp+=75;try{localStorage.setItem('neonRushChallengeClaimed',CHALLENGE_DATE)}catch{}save();toast('MISSION COMPLETE · +'+dailyChallenge.reward);sound(880,.22)}
 }
@@ -570,10 +593,28 @@ function updateRain(dt){
  });rainMesh.geometry.attributes.position.needsUpdate=true;
 }
 function sound(freq=480,dur=.08){if(!soundOn)return;try{if(!audio)audio=new(window.AudioContext||window.webkitAudioContext)();if(audio.state==='suspended')audio.resume();const o=audio.createOscillator(),g=audio.createGain();o.type='sine';o.frequency.value=freq;g.gain.value=.04;g.gain.exponentialRampToValueAtTime(.001,audio.currentTime+dur);o.connect(g);g.connect(audio.destination);o.start();o.stop(audio.currentTime+dur)}catch{}}
-function updateHud(){ $('wallet').textContent=profile.coins;$('score').textContent=String(Math.floor(score)).padStart(6,'0');$('best').textContent=String(profile.best).padStart(6,'0');$('speed').textContent=Math.round(speed);$('lap').textContent=Math.min(totalLaps,lap)+'/'+totalLaps;$('runCoins').textContent=runCoins;$('nitroLabel').textContent=Math.round(nitro)+'%';$('nitroFill').style.width=nitro+'%';const i=leagueIndex(),l=leagueData[i],next=leagueData[i+1];$('league').textContent=l.name+' · LEVEL '+(i+1);$('xp').textContent=next?profile.xp+' / '+next.xp+' XP':profile.xp+' XP · MAX';$('xpFill').style.width=next?Math.min(100,(profile.xp-l.xp)/(next.xp-l.xp)*100)+'%':'100%';$('lapFill').style.width=Math.min(100,(lap+Math.min(1,playerDist/trackLength-lap))*100/totalLaps)+'%';$('objective').innerHTML='Finish '+totalLaps+' laps, collect gold rings and dodge red hazards.<br><b style="color:var(--lime)">Finish reward: 250 coins</b>'}
+function updateHud(){
+ $('wallet').textContent=profile.coins;$('score').textContent=String(Math.floor(score)).padStart(6,'0');$('best').textContent=String(profile.best).padStart(6,'0');$('speed').textContent=Math.round(speed);
+ $('lap').textContent=Math.min(totalLaps,lap)+'/'+totalLaps;$('runCoins').textContent=runCoins;$('nitroLabel').textContent=Math.round(nitro)+'%';$('nitroFill').style.width=nitro+'%';
+ const i=leagueIndex(),l=leagueData[i],next=leagueData[i+1];$('league').textContent=l.name+' · LEVEL '+(i+1);$('xp').textContent=next?profile.xp+' / '+next.xp+' XP':profile.xp+' XP · MAX';$('xpFill').style.width=next?Math.min(100,(profile.xp-l.xp)/(next.xp-l.xp)*100)+'%':'100%';
+ $('lapFill').style.width=Math.min(100,(lap+Math.min(1,trackLength?playerDist/trackLength-lap:0))*100/totalLaps)+'%';
+ if($('raceTime'))$('raceTime').textContent=raceStart?formatTime(performance.now()-raceStart):'00:00';if($('bestLap'))$('bestLap').textContent=profile.bestLapMs?formatTime(profile.bestLapMs):'--:--';
+ if($('worldToggle'))$('worldToggle').textContent='🌦 WORLD: '+['DAY','RAIN','NIGHT'][worldMode];if($('cameraToggle'))$('cameraToggle').textContent='📷 CAM: '+['CHASE','HOOD','CINEMA'][cameraMode];if($('paintToggle'))$('paintToggle').textContent='🎨 '+PAINT_NAMES[paintIndex];
+ if($('missionToggle'))$('missionToggle').textContent='🎯 '+dailyChallenge.title+' '+(challengeClaimedToday?'✓':Math.floor(challengeProgress)+'/'+dailyChallenge.goal);
+ const active=[];if(shieldTimer>0)active.push('SHIELD '+shieldTimer.toFixed(1)+'s');if(magnetTimer>0)active.push('MAGNET '+magnetTimer.toFixed(1)+'s');if(overdriveTimer>0)active.push('OVERDRIVE '+overdriveTimer.toFixed(1)+'s');
+ $('objective').innerHTML='<b style="color:var(--lime)">'+dailyChallenge.title+'</b> · '+dailyChallenge.description+'<br>Progress: '+(challengeClaimedToday?dailyChallenge.goal:Math.floor(challengeProgress))+'/'+dailyChallenge.goal+' · Reward '+dailyChallenge.reward+' coins<br><span style="color:#b8c5d4">'+(active.length?active.join(' · '):'Q shield · E coin magnet · T weather · C camera')+'</span><br><b style="color:var(--lime)">Finish reward: 250 coins · Clean lap: +25</b>';
+}
 function leagueIndex(){let i=0;leagueData.forEach((l,n)=>{if(profile.xp>=l.xp)i=n});return i}
-function resetRun(){playerDist=0;lateral=0;lap=0;score=0;speed=0;velocity=0;speedScale=1;impactSlowdown=0;nitro=Math.min(100,75+(profile.upgrades.nitro||0)*5+activeRide.nitro*3);runCoins=0;boosting=false;drifting=false;keys.clear();finishTriggered=false;coins.forEach(o=>{o.active=true;o.mesh.visible=true});hazards.forEach(o=>{o.active=true;o.mesh.visible=true});resetOpponents();updateHud()}
-function start(){panelReturnToRace=false;resetRun();state='racing';$('overlay').classList.add('hidden');$('pause').textContent='Ⅱ PAUSE';lastTime=performance.now();sound(330,.15)}
+function resetRun(){
+ playerDist=0;lateral=0;lap=0;score=0;speed=0;velocity=0;speedScale=1;impactSlowdown=0;
+ nitro=Math.min(100,75+(profile.upgrades.nitro||0)*5+activeRide.nitro*3);runCoins=0;boosting=false;drifting=false;keys.clear();finishTriggered=false;
+ shieldTimer=0;magnetTimer=0;overdriveTimer=0;driftTimer=0;driftCombo=1;driftScore=0;effectTimer=0;drafting=false;wasDrafting=false;perfectLap=true;challengeProgress=0;
+ raceStart=performance.now();lapStartTime=raceStart;currentLapTime=0;
+ coins.forEach(o=>{o.active=true;o.nearMissed=false;o.mesh.visible=true});hazards.forEach(o=>{o.active=true;o.nearMissed=false;o.mesh.visible=true});
+ powerups.forEach(o=>{o.active=true;o.mesh.visible=true});boostPads.forEach(o=>{o.active=true;o.mesh.visible=true});
+ resetOpponents();if(rideRoot){rideRoot.visible=true;ensureRideVisible()}updateHud();
+}
+function start(){panelReturnToRace=false;ensureRideVisible();resetRun();state='racing';$('overlay').classList.add('hidden');$('pause').textContent='Ⅱ PAUSE';lastTime=performance.now();sound(330,.15)}
 function finish(){if(finishTriggered)return;finishTriggered=true;state='finished';const reward=250+Math.floor(score/20);profile.coins+=reward;profile.xp+=Math.floor(score)+lap*150;profile.best=Math.max(profile.best,Math.floor(score));save();updateHud();sound(780,.3);gameOverlay('CHAMPION · +'+reward+' COINS','RACE<br>WINNER.','You completed '+totalLaps+' laps on '+activeTrack.name+'. Score: '+Math.floor(score)+'. Spend your rewards on new rides and tracks.','RACE AGAIN')}
 function crash(){
   if(finishTriggered||state!=='racing')return;
