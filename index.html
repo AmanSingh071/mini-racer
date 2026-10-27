@@ -16,11 +16,84 @@
 <footer><span>STREET RACING · RIVERFRONT · DRIFT CANYON · GRAND PRIX</span><span>YOUR RIDES & UPGRADES SAVE LOCALLY</span></footer></main>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/RGBELoader.js"></script>
 <script>
 (()=>{'use strict';
 const $=id=>document.getElementById(id),canvas=$('view');
 if(!window.THREE){$('modal').innerHTML='<h2>3D ENGINE<br>UNAVAILABLE</h2><p>Allow the Three.js CDN in your browser and reload to play the 3D version.</p>';return}
 const THREE=window.THREE;
+const VISUAL_ASSETS={
+ hdri:'https://dl.polyhaven.org/file/ph-assets/HDRIs/hdr/1k/venice_sunset_1k.hdr',
+ asphalt:{
+  map:'https://dl.polyhaven.org/file/ph-assets/Textures/jpg/1k/asphalt_03/asphalt_03_diff_1k.jpg',
+  normal:'https://dl.polyhaven.org/file/ph-assets/Textures/jpg/1k/asphalt_03/asphalt_03_nor_gl_1k.jpg',
+  rough:'https://dl.polyhaven.org/file/ph-assets/Textures/jpg/1k/asphalt_03/asphalt_03_rough_1k.jpg'
+ },
+ ground:{
+  map:'https://dl.polyhaven.org/file/ph-assets/Textures/jpg/1k/forest_ground_01/forest_ground_01_diff_1k.jpg',
+  normal:'https://dl.polyhaven.org/file/ph-assets/Textures/jpg/1k/forest_ground_01/forest_ground_01_nor_gl_1k.jpg',
+  rough:'https://dl.polyhaven.org/file/ph-assets/Textures/jpg/1k/forest_ground_01/forest_ground_01_rough_1k.jpg'
+ }
+};
+let highQualityTextures=null,highQualityEnvironment=null;
+function loadHighQualityEnvironment(){
+ if(!renderer||!THREE.RGBELoader)return;
+ try{
+  new THREE.RGBELoader().load(VISUAL_ASSETS.hdri,texture=>{
+   texture.mapping=THREE.EquirectangularReflectionMapping;
+   const pmrem=new THREE.PMREMGenerator(renderer);
+   pmrem.compileEquirectangularShader();
+   highQualityEnvironment=pmrem.fromEquirectangular(texture).texture;
+   scene.environment=highQualityEnvironment;
+   scene.background=texture;
+   pmrem.dispose();
+  },undefined,error=>console.warn('HDRI lighting unavailable; using built-in lighting.',error));
+ }catch(error){console.warn('HDRI setup failed; using built-in lighting.',error)}
+}
+function loadHighQualityTextures(){
+ if(!renderer)return;
+ const loader=new THREE.TextureLoader();loader.setCrossOrigin('anonymous');
+ const load=url=>new Promise(resolve=>loader.load(url,resolve,undefined,()=>resolve(null)));
+ Promise.all([
+  load(VISUAL_ASSETS.asphalt.map),load(VISUAL_ASSETS.asphalt.normal),load(VISUAL_ASSETS.asphalt.rough),
+  load(VISUAL_ASSETS.ground.map),load(VISUAL_ASSETS.ground.normal),load(VISUAL_ASSETS.ground.rough)
+ ]).then(([roadMap,roadNormal,roadRough,groundMap,groundNormal,groundRough])=>{
+  const prepare=(texture,colorMap=false)=>{
+   if(!texture)return null;
+   texture.wrapS=texture.wrapT=THREE.RepeatWrapping;
+   texture.anisotropy=Math.min(8,renderer.capabilities.getMaxAnisotropy());
+   if(colorMap)texture.encoding=THREE.sRGBEncoding;
+   return texture;
+  };
+  highQualityTextures={
+   asphalt:{map:prepare(roadMap,true),normal:prepare(roadNormal),rough:prepare(roadRough)},
+   ground:{map:prepare(groundMap,true),normal:prepare(groundNormal),rough:prepare(groundRough)}
+  };
+  applyHighQualityTextures();
+ }).catch(error=>console.warn('PBR texture loading failed; keeping procedural materials.',error));
+}
+function applyHighQualityTextures(){
+ if(!roadGroup||!highQualityTextures)return;
+ roadGroup.traverse(object=>{
+  if(!object.isMesh||!object.material||Array.isArray(object.material))return;
+  if(object.userData.pbrRoad&&highQualityTextures.asphalt.map){
+   const m=object.material,t=highQualityTextures.asphalt,repeat=Math.max(12,trackLength/7);
+   [t.map,t.normal,t.rough].forEach(texture=>{if(texture)texture.repeat.set(2,repeat)});
+   m.map=t.map;m.normalMap=t.normal;m.roughnessMap=t.rough;m.color.set(0xb5b5b5);
+   m.roughness=.94;m.metalness=.015;
+   if(m.normalScale)m.normalScale.set(.72,.72);
+   m.needsUpdate=true;
+  }
+  if(object.userData.pbrGround&&highQualityTextures.ground.map){
+   const m=object.material,t=highQualityTextures.ground;
+   [t.map,t.normal,t.rough].forEach(texture=>{if(texture)texture.repeat.set(28,28)});
+   m.map=t.map;m.normalMap=t.normal;m.roughnessMap=t.rough;m.color.set(0xc1c0b6);
+   m.roughness=.98;m.metalness=0;
+   if(m.normalScale)m.normalScale.set(.9,.9);
+   m.needsUpdate=true;
+  }
+ });
+}
 const tracks=[
 {id:'city',name:'Midnight City Run',shape:'city',price:0,color:0x9caeb2,desc:'A long street circuit through a dense downtown skyline.'},
 {id:'river',name:'Riverfront Express',shape:'river',price:350,color:0x5f9eac,desc:'Fast riverside straights, sweeping bends and bridge-side views.'},
@@ -67,7 +140,7 @@ for(const u of upgrades)profile.upgrades[u.id]=Math.min(u.max,Math.floor(safeNum
 function save(){try{localStorage.setItem('neonRush3DProfile',JSON.stringify(profile));localStorage.setItem('miniRacerProfileV2',JSON.stringify({coins:profile.coins,xp:profile.xp,best:profile.best,selected:profile.selectedRide,owned:profile.ownedRides,upgrades:profile.upgrades,claimed:profile.claimed}))}catch{}}
 let state='menu',renderer,scene,camera,clock,trackCurve,trackPoints=[],trackLength=0,roadGroup,rideRoot,rideModel,rideWheels=[],playerDist=0,lateral=0,lap=0,totalLaps=3,score=0,speed=0,velocity=0,nitro=100,runCoins=0,boosting=false,drifting=false,speedScale=1,impactSlowdown=0,keys=new Set(),lastTime=0,coins=[],hazards=[],opponents=[],particles=[],toastTimer=0,soundOn=true,audio=null,shake=0,activeTrack=tracks[0],activeRide=rides[0],finishTriggered=false,panelReturnToRace=false;
 const mat=(color,roughness=.55,metalness=.12,emissive=0)=>new THREE.MeshStandardMaterial({color,roughness,metalness,emissive,emissiveIntensity:emissive?0.4:0});
-function init3D(){activeTrack=tracks.find(t=>t.id===profile.selectedTrack)||tracks[0];activeRide=rides.find(r=>r.id===profile.selectedRide)||rides[0];renderer=new THREE.WebGLRenderer({canvas,antialias:true,alpha:false});renderer.setPixelRatio(Math.min(window.devicePixelRatio||1,1.75));renderer.setSize(canvas.clientWidth||800,canvas.clientHeight||600,false);renderer.shadowMap.enabled=true;renderer.shadowMap.type=THREE.PCFSoftShadowMap;renderer.outputEncoding=THREE.sRGBEncoding;renderer.toneMapping=THREE.ACESFilmicToneMapping;renderer.toneMappingExposure=.92;renderer.physicallyCorrectLights=true;scene=new THREE.Scene();scene.background=new THREE.Color(0x9aa5aa);scene.fog=new THREE.Fog(0x9aa5aa,90,210);camera=new THREE.PerspectiveCamera(62,1,.1,420);clock=new THREE.Clock();scene.add(new THREE.HemisphereLight(0xe8f0f4,0x40463d,1.55));const sun=new THREE.DirectionalLight(0xfff1d7,2.35);sun.position.set(-22,42,16);sun.castShadow=true;sun.shadow.mapSize.set(1536,1536);sun.shadow.camera.left=-75;sun.shadow.camera.right=75;sun.shadow.camera.top=75;sun.shadow.camera.bottom=-75;sun.shadow.bias=-0.00025;scene.add(sun);const fill=new THREE.DirectionalLight(0xa4c2d8,.42);fill.position.set(22,12,-28);scene.add(fill);window.addEventListener('resize',resize);resize();buildTrack();buildRide();buildOpponents();scatterScenery();const preview=sampleAt(0);rideRoot.position.set(preview.point.x,.22,preview.point.z);orientRide(preview);camera.position.copy(preview.point.clone().addScaledVector(preview.tangent,-16));camera.position.y=8.8;camera.lookAt(preview.point.x,1,preview.point.z);animate()}
+function init3D(){activeTrack=tracks.find(t=>t.id===profile.selectedTrack)||tracks[0];activeRide=rides.find(r=>r.id===profile.selectedRide)||rides[0];renderer=new THREE.WebGLRenderer({canvas,antialias:true,alpha:false});renderer.setPixelRatio(Math.min(window.devicePixelRatio||1,1.75));renderer.setSize(canvas.clientWidth||800,canvas.clientHeight||600,false);renderer.shadowMap.enabled=true;renderer.shadowMap.type=THREE.PCFSoftShadowMap;renderer.outputEncoding=THREE.sRGBEncoding;renderer.toneMapping=THREE.ACESFilmicToneMapping;renderer.toneMappingExposure=1.08;renderer.physicallyCorrectLights=true;scene=new THREE.Scene();scene.background=new THREE.Color(0x9aa5aa);scene.fog=new THREE.Fog(0x9aa5aa,90,210);camera=new THREE.PerspectiveCamera(62,1,.1,420);clock=new THREE.Clock();scene.add(new THREE.HemisphereLight(0xe8f0f4,0x40463d,1.55));const sun=new THREE.DirectionalLight(0xfff1d7,2.35);sun.position.set(-22,42,16);sun.castShadow=true;sun.shadow.mapSize.set(2048,2048);sun.shadow.radius=4;sun.shadow.camera.left=-75;sun.shadow.camera.right=75;sun.shadow.camera.top=75;sun.shadow.camera.bottom=-75;sun.shadow.bias=-0.00025;scene.add(sun);const fill=new THREE.DirectionalLight(0xa4c2d8,.42);fill.position.set(22,12,-28);scene.add(fill);window.addEventListener('resize',resize);resize();buildTrack();loadHighQualityEnvironment();loadHighQualityTextures();buildRide();buildOpponents();scatterScenery();const preview=sampleAt(0);rideRoot.position.set(preview.point.x,.22,preview.point.z);orientRide(preview);camera.position.copy(preview.point.clone().addScaledVector(preview.tangent,-16));camera.position.y=8.8;camera.lookAt(preview.point.x,1,preview.point.z);animate()}
 function resize(){if(!renderer)return;const w=canvas.clientWidth||800,h=canvas.clientHeight||600;renderer.setSize(w,h,false);camera.aspect=w/h;camera.updateProjectionMatrix()}
 function curveFor(track){
   const path=points=>new THREE.CatmullRomCurve3(points.map(([x,z])=>new THREE.Vector3(x,z,0)),true,'centripetal',.14);
@@ -99,7 +172,7 @@ function buildTrack(){
   for(let i=0;i<trackPoints.length;i++)trackLength+=trackPoints[i].distanceTo(trackPoints[(i+1)%trackPoints.length]);
   const groundColor=activeTrack.shape==='gp'?0x474c4d:activeTrack.shape==='city'?0x4c504d:activeTrack.shape==='drift'?0x58564c:0x45544c;
   const groundMat=mat(groundColor,1,0);
-  const ground=new THREE.Mesh(new THREE.PlaneGeometry(340,340),groundMat);ground.rotation.x=-Math.PI/2;ground.position.y=-.38;ground.receiveShadow=true;roadGroup.add(ground);
+  const ground=new THREE.Mesh(new THREE.PlaneGeometry(340,340),groundMat);ground.userData.pbrGround=true;ground.rotation.x=-Math.PI/2;ground.position.y=-.38;ground.receiveShadow=true;roadGroup.add(ground);
   if(activeTrack.shape==='river'){
     // A separate, curved waterway runs alongside a segment of the circuit.
     roadGroup.add(makeOffsetRibbon(19,22,-.20,0x286579,.07,.39));
@@ -109,7 +182,7 @@ function buildTrack(){
   // Asphalt, paved shoulders, track edges and broken lane paint.
   roadGroup.add(makeRibbon(14.0,-.075,0x66665e));
   roadGroup.add(makeRibbon(12.35,-.005,0x262a2d));
-  roadGroup.add(makeRibbon(11.65,.025,0x303438));
+  const asphaltSurface=makeRibbon(11.65,.025,0x303438);asphaltSurface.userData.pbrRoad=true;roadGroup.add(asphaltSurface);applyHighQualityTextures();
   // Painted edge lines and spaced red/white kerb blocks.
   const edgeMat=mat(0xe1e1dc,.8,0),dashMat=mat(0xe4e0d5,.82,0);
   for(let side of [-1,1]){
@@ -163,40 +236,58 @@ for(const x of [-.9,.9])for(const z of [-1.06,1.06]){
 }
 g.scale.setScalar(.9);return g}
 const REAL_VEHICLE_ASSETS={
- bike:'https://www.innerscene.com/api/library/sport-motorcycle-e21e8303/download',
- car:'https://raw.githubusercontent.com/JaronKBragg7337/spectral-gt-rs/main/spectral_gt_rs_game_ready.glb'
+ bike:{url:'https://www.innerscene.com/api/library/sport-motorcycle-e21e8303/download',rotationY:Math.PI/2},
+ superbike:{url:'https://cdn.3dassets.dev/assets/15424/v1/model.glb',rotationY:Math.PI},
+ dirtbike:{url:'https://www.innerscene.com/api/library/dirt-motorcycle-0a9c8589/download',rotationY:Math.PI/2},
+ sportscar:{url:'https://cdn.3dassets.dev/assets/32495/v1/model.glb',rotationY:Math.PI},
+ rally:{url:'https://cdn.3dassets.dev/assets/18687/v1/model.glb',rotationY:Math.PI},
+ future:{url:'https://raw.githubusercontent.com/JaronKBragg7337/spectral-gt-rs/main/spectral_gt_rs_game_ready.glb',rotationY:Math.PI/2}
 };
+function colourRealVehicle(imported,color){
+ const tint=new THREE.Color(color);
+ imported.traverse(o=>{
+  if(!o.isMesh)return;o.castShadow=true;o.receiveShadow=true;
+  const mats=Array.isArray(o.material)?o.material:[o.material];
+  o.material=mats.map(m=>{
+   const copy=m.clone(),n=((copy.name||'')+' '+(o.name||'')).toLowerCase();
+   if(/body|paint|panel|hood|fairing|tank|exterior|shell|bumper/.test(n)&&copy.color)copy.color.lerp(tint,.38);
+   if('roughness' in copy)copy.roughness=Math.max(.14,Math.min(.82,copy.roughness||.32));
+   return copy;
+  });
+ });
+}
+function normalizeRealVehicle(gltf,color,targetLength,rotationY){
+ const imported=gltf.scene,size=new THREE.Box3().setFromObject(imported).getSize(new THREE.Vector3());
+ if(!Number.isFinite(size.x+size.y+size.z)||Math.max(size.x,size.y,size.z)<.01)return null;
+ const scale=targetLength/Math.max(size.x,size.z),wrapper=new THREE.Group();
+ imported.scale.setScalar(scale);imported.rotation.y=rotationY;
+ wrapper.add(imported);wrapper.updateMatrixWorld(true);
+ const box=new THREE.Box3().setFromObject(wrapper),center=box.getCenter(new THREE.Vector3());
+ wrapper.position.set(-center.x,-box.min.y,-center.z);colourRealVehicle(imported,color);
+ return wrapper;
+}
 function loadRealRideModel(fallbackRoot,rideAtRequest){
-  if(!THREE.GLTFLoader||!fallbackRoot)return;
-  const url=REAL_VEHICLE_ASSETS[rideAtRequest.kind];
-  if(!url)return;
-  const loader=new THREE.GLTFLoader();
-  loader.load(url,gltf=>{
-    if(rideRoot!==fallbackRoot||activeRide.id!==rideAtRequest.id||!gltf.scene)return;
-    const imported=gltf.scene;const size=new THREE.Box3().setFromObject(imported).getSize(new THREE.Vector3());
-    if(!Number.isFinite(size.x+size.y+size.z)||Math.max(size.x,size.y,size.z)<.01)return;
-    // These CC0 assets use real-world dimensions; normalize to a track-sized vehicle footprint.
-    const length=Math.max(size.x,size.z),targetLength=rideAtRequest.kind==='bike'?2.65:3.65;
-    const scale=targetLength/length,wrapper=new THREE.Group();
-    imported.scale.setScalar(scale);
-    imported.rotation.y=(size.x>=size.z)?Math.PI/2:0;
-    wrapper.add(imported);wrapper.updateMatrixWorld(true);
-    const box=new THREE.Box3().setFromObject(wrapper),center=box.getCenter(new THREE.Vector3());
-    wrapper.position.set(-center.x,-box.min.y,-center.z);
-    imported.traverse(o=>{
-      if(!o.isMesh)return;o.castShadow=true;o.receiveShadow=true;
-      const tint=new THREE.Color(rideAtRequest.color);
-      const mats=Array.isArray(o.material)?o.material:[o.material];
-      o.material=mats.map(m=>{
-        const copy=m.clone();const n=(copy.name||o.name||'').toLowerCase();
-        if(/body|paint|panel|hood|fairing|tank|exterior|shell/.test(n)&&copy.color)copy.color.lerp(tint,.26);
-        if('roughness' in copy)copy.roughness=Math.max(.2,Math.min(.72,copy.roughness||.35));
-        return copy;
-      });
-    });
-    fallbackRoot.remove(rideModel);disposeTree(rideModel);
-    rideModel=wrapper;fallbackRoot.add(rideModel);rideModel.visible=true;
-  },undefined,err=>{console.warn('Real model unavailable; using local vehicle model.',err)});
+ if(!THREE.GLTFLoader||!fallbackRoot)return;
+ const asset=REAL_VEHICLE_ASSETS[rideAtRequest.id];if(!asset)return;
+ new THREE.GLTFLoader().load(asset.url,gltf=>{
+  if(rideRoot!==fallbackRoot||activeRide.id!==rideAtRequest.id||!gltf.scene)return;
+  const wrapper=normalizeRealVehicle(gltf,rideAtRequest.color,rideAtRequest.kind==='bike'?2.65:3.65,asset.rotationY);
+  if(!wrapper)return;
+  fallbackRoot.remove(rideModel);disposeTree(rideModel);
+  rideModel=wrapper;fallbackRoot.add(rideModel);rideModel.visible=true;
+ },undefined,error=>console.warn('Detailed ride model unavailable; procedural model remains active.',error));
+}
+function loadRealOpponentModel(opponent){
+ if(!THREE.GLTFLoader)return;
+ const asset=REAL_VEHICLE_ASSETS.sportscar;
+ new THREE.GLTFLoader().load(asset.url,gltf=>{
+  if(!opponents.includes(opponent)||!gltf.scene)return;
+  const wrapper=normalizeRealVehicle(gltf,opponent.color,3.3,asset.rotationY);
+  if(!wrapper)return;
+  const fallback=opponent.root.children[0];
+  if(fallback){opponent.root.remove(fallback);disposeTree(fallback)}
+  opponent.root.add(wrapper);opponent.model=wrapper;wrapper.visible=true;
+ },undefined,error=>console.warn('Detailed rival model unavailable; procedural rival remains active.',error));
 }
 function buildRide(){
   if(rideRoot){scene.remove(rideRoot);disposeTree(rideRoot)}
@@ -218,7 +309,7 @@ function buildOpponents(){
     root.add(model);root.visible=true;scene.add(root);
     opponents.push({...spec,root,model,dist:-spec.gap,velocity:0});
   }
-  updateOpponentPositions(0);
+  updateOpponentPositions(0);opponents.forEach(loadRealOpponentModel);
 }
 function updateOpponentPositions(dt=0){
   for(const o of opponents){
