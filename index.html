@@ -638,11 +638,94 @@ function upgradesView(){show('<div class="eyebrow">PERMANENT MACHINE UPGRADES</d
 function leagueView(){show('<div class="eyebrow">CAREER PROGRESSION</div><h2>CLIMB<br>THE RANKS.</h2><p>Race score and completed laps grant XP. Higher leagues unlock bonus coins.</p><div class="cards">'+leagueData.map((l,i)=>{const open=profile.xp>=l.xp,claimed=profile.claimed.includes(i);return '<div class="item"><h3>'+(open?'🔓':'🔒')+' '+l.name+'</h3><p>'+l.xp+' XP required</p><div class="reward">REWARD · '+l.reward+' COINS</div><button data-league="'+i+'" '+(!open||claimed||i===0?'disabled':'')+'>'+(i===0?'STARTER LEAGUE':claimed?'CLAIMED':open?'CLAIM REWARD':'LOCKED')+'</button></div>'}).join('')+'</div><div class="actions"><button class="primary" id="homeReturn">BACK TO RACE</button></div>');document.querySelectorAll('[data-league]').forEach(b=>b.onclick=()=>{const i=+b.dataset.league,l=leagueData[i];if(profile.xp>=l.xp&&!profile.claimed.includes(i)&&i>0){profile.claimed.push(i);profile.coins+=l.reward;save();updateHud();leagueView()}});$('homeReturn').onclick=returnFromPanel}
 function drawStatic(){if(!renderer)return;renderer.render(scene,camera)}
 function animate(){requestAnimationFrame(animate);if(!renderer)return;if(state==='racing')tick();else if(state==='menu'&&rideRoot&&trackPoints.length){const s=sampleAt(playerDist);rideRoot.position.set(s.point.x,.22,s.point.z);orientRide(s);const cam=s.point.clone().addScaledVector(s.tangent,-10);cam.y=7.8;camera.position.lerp(cam,.12);const target=s.point.clone().addScaledVector(s.tangent,1.8);updateOpponentPositions(0);camera.lookAt(target.x,1.0,target.z)}renderer.render(scene,camera)}
-function tick(){const now=performance.now(),dt=Math.min((now-lastTime)/1000,.04);lastTime=now;if(impactSlowdown>0){impactSlowdown=Math.max(0,impactSlowdown-dt);speedScale=impactSlowdown>0?.62+.38*(1-impactSlowdown/1.25):1}else speedScale=1;const steer=(keys.has('ArrowLeft')||keys.has('a')||keys.has('A')?1:0)+(keys.has('ArrowRight')||keys.has('d')||keys.has('D')?-1:0);const throttle=keys.has('w')||keys.has('W')||keys.has('throttle'),braking=keys.has('s')||keys.has('S')||keys.has('ArrowDown')||keys.has('brake');drifting=(keys.has('Shift')||keys.has('shift'))&&steer!==0;const up=profile.upgrades;const base=23+activeRide.speed*2.1+up.engine*1.6;boosting=(keys.has(' ')||keys.has('Spacebar')||keys.has('boost'))&&nitro>0&&!braking;nitro=boosting?Math.max(0,nitro-(29+up.nitro*2+activeRide.nitro)*dt):Math.min(100,nitro+(7+up.nitro+(drifting?3:0))*dt);if(throttle)velocity=Math.min(base,velocity+(12.5+up.engine*1.25)*dt);else velocity=Math.max(0,velocity-2.8*dt);if(braking){velocity=Math.max(0,velocity-(30+up.handling)*dt);boosting=false}if(boosting)velocity=Math.min(base+10+up.nitro*1.3,velocity+(6+up.nitro)*dt);const actual=velocity*speedScale;speed=actual*4.1;playerDist+=actual*dt;updateOpponentPositions(dt);lateral+=steer*((drifting?9.2:5.8)+activeRide.handling*.5+up.handling*.65)*dt;lateral=Math.max(-3.7,Math.min(3.7,lateral));score+=dt*(8+(boosting?5:0)+(drifting?7:0));const currentLap=Math.floor(playerDist/trackLength);if(currentLap>lap){lap=currentLap;toast('LAP '+Math.min(lap,totalLaps)+' COMPLETE');sound(600,.12);if(lap>=totalLaps){finish();return}coins.forEach(o=>{o.active=true;o.mesh.visible=true});hazards.forEach(o=>{o.active=true;o.mesh.visible=true})}const s=sampleAt(playerDist);rideRoot.position.set(s.point.x,.22,s.point.z);orientRide(s);if(activeRide.kind==='bike'){rideModel.rotation.z=-steer*(drifting?.23:.13)-lateral*.01;rideModel.rotation.x=boosting?-.025:0;rideModel.rotation.y=drifting?-steer*.12:0}else{rideModel.rotation.z=-steer*(drifting?.09:.045);rideModel.rotation.y=drifting?-steer*.18:0}
-for(const c of coins){if(!c.active)continue;c.mesh.rotation.y+=dt*2.6;if(c.mesh.position.distanceTo(rideRoot.position.clone().setY(1.1))<1.65){c.active=false;c.mesh.visible=false;runCoins+=5;profile.coins+=5;score+=40;nitro=Math.min(100,nitro+4);toast('+5 COINS');sound(760,.08);save()}}
-for(const h of hazards){if(!h.active)continue;const dx=rideRoot.position.x-h.mesh.position.x,dz=rideRoot.position.z-h.mesh.position.z;if(Math.hypot(dx,dz)<1.95){h.active=false;h.mesh.visible=false;impactSlowdown=1.5;speedScale=.42;speed=base*4.1*.42;boosting=false;nitro=Math.max(0,nitro-5);toast('BARRIER HIT · SPEED REDUCED');sound(180,.16)}}
-
-const cam=s.point.clone().addScaledVector(s.tangent,-16);cam.y=activeRide.kind==='bike'?7.2:7.8;camera.position.lerp(cam,.13);const target=s.pos.clone().addScaledVector(s.tangent,3.8);camera.lookAt(target.x,1.1,target.z);updateHud();if(toastTimer>0){toastTimer-=dt;if(toastTimer<=0)$('toast').classList.remove('show')}}
+function tick(){
+ const now=performance.now(),dt=Math.min((now-lastTime)/1000,.04);lastTime=now;
+ if(!rideRoot||!rideRoot.visible||vehicleMeshCount(rideModel)<12)ensureRideVisible();
+ if(impactSlowdown>0){impactSlowdown=Math.max(0,impactSlowdown-dt);speedScale=impactSlowdown>0?.62+.38*(1-impactSlowdown/1.25):1}else speedScale=1;
+ shieldTimer=Math.max(0,shieldTimer-dt);magnetTimer=Math.max(0,magnetTimer-dt);overdriveTimer=Math.max(0,overdriveTimer-dt);draftToastCooldown=Math.max(0,draftToastCooldown-dt);
+ const steer=(keys.has('ArrowLeft')||keys.has('a')||keys.has('A')?1:0)+(keys.has('ArrowRight')||keys.has('d')||keys.has('D')?-1:0);
+ const throttle=keys.has('w')||keys.has('W')||keys.has('throttle'),braking=keys.has('s')||keys.has('S')||keys.has('ArrowDown')||keys.has('brake');
+ drifting=(keys.has('Shift')||keys.has('shift'))&&steer!==0;
+ const up=profile.upgrades,wet=worldMode===1,base=23+activeRide.speed*2.1+up.engine*1.6,weatherGrip=wet?.82:1;
+ boosting=(keys.has(' ')||keys.has('Spacebar')||keys.has('boost'))&&nitro>0&&!braking;
+ nitro=boosting?Math.max(0,nitro-(29+up.nitro*2+activeRide.nitro)*dt):Math.min(100,nitro+(7+up.nitro+(drifting?3:0)+(drafting?3:0))*dt);
+ const maxSpeed=base+(overdriveTimer>0?9:0);
+ if(throttle)velocity=Math.min(maxSpeed,velocity+(12.5+up.engine*1.25)*dt);
+ else velocity=Math.max(0,velocity-2.8*dt);
+ if(braking){velocity=Math.max(0,velocity-(30+up.handling)*dt);boosting=false}
+ if(boosting)velocity=Math.min(maxSpeed+10+up.nitro*1.3,velocity+(6+up.nitro)*dt);
+ updateOpponentPositions(dt);
+ drafting=false;
+ for(const o of opponents){const gap=o.dist-playerDist;if(gap>2&&gap<14&&Math.abs(o.lane-lateral)<1.85){drafting=true;break}}
+ if(drafting){velocity=Math.min(maxSpeed+7,velocity+4.2*dt);nitro=Math.min(100,nitro+2.4*dt);score+=14*dt;if(!wasDrafting&&draftToastCooldown<=0){toast('SLIPSTREAM · +NITRO');draftToastCooldown=1.8}}
+ wasDrafting=drafting;
+ const actual=velocity*speedScale*(wet?.91:1);speed=actual*4.1;playerDist+=actual*dt;
+ lateral+=steer*((drifting?9.2:5.8)+activeRide.handling*.5+up.handling*.65)*weatherGrip*dt;
+ lateral=Math.max(-3.7,Math.min(3.7,lateral));
+ score+=dt*(8+(boosting?5:0)+(drafting?4:0));
+ if(drifting&&speed>32){driftTimer+=dt;driftCombo=Math.min(6,1+Math.floor(driftTimer/1.8));driftScore+=dt*12*driftCombo;score+=dt*7*driftCombo;if(dailyChallenge.id==='drift')recordChallengeProgress('drift',dt);if(Math.random()<dt*8){const p=rideRoot.localToWorld(new THREE.Vector3((Math.random()-.5)*.45,.38,activeRide.kind==='bike'?.82:1.45));spawnFx(p,0xb9c3c8,3,.65)}}
+ else if(driftTimer>0){const bonus=Math.floor(driftScore+driftTimer*18*driftCombo);score+=bonus;toast('DRIFT x'+driftCombo+' · +'+bonus);driftTimer=0;driftScore=0;driftCombo=1}
+ if(boosting&&Math.random()<dt*18){const p=rideRoot.localToWorld(new THREE.Vector3((Math.random()-.5)*.4,.42,activeRide.kind==='bike'?.95:1.55));spawnFx(p,worldMode===2?0x77caff:0x33f4ff,4,1.6)}
+ rideWheels.forEach(w=>{w.rotation.x-=actual*dt*1.35});
+ if(rideModel){
+  if(activeRide.kind==='bike'){rideModel.rotation.z=-steer*(drifting?.27:.14)-lateral*.012;rideModel.rotation.x=boosting?-.05:0;rideModel.rotation.y=drifting?-steer*.12:0}
+  else{rideModel.rotation.z=-steer*(drifting?.1:.05);rideModel.rotation.x=boosting?-.018:0;rideModel.rotation.y=drifting?-steer*.16:0}
+ }
+ updateRain(dt);updateFx(dt);
+ for(const c of coins){
+  if(!c.active)continue;c.mesh.rotation.y+=dt*2.6;
+  if(magnetTimer>0&&c.mesh.position.distanceTo(rideRoot.position)<18)c.mesh.position.lerp(rideRoot.position.clone().add(new THREE.Vector3(0,1.15,0)),Math.min(.22,dt*4));
+  if(c.mesh.position.distanceTo(rideRoot.position.clone().setY(1.1))<1.65){c.active=false;c.mesh.visible=false;runCoins+=5;profile.coins+=5;score+=40;nitro=Math.min(100,nitro+4);if(dailyChallenge.id==='coins')recordChallengeProgress('coins',1);toast('+5 COINS');sound(760,.08);save()}
+ }
+ for(const h of hazards){
+  if(!h.active)continue;const dx=rideRoot.position.x-h.mesh.position.x,dz=rideRoot.position.z-h.mesh.position.z,d=Math.hypot(dx,dz);
+  if(d<3.8&&d>2.15&&!h.nearMissed){h.nearMissed=true;score+=75;nitro=Math.min(100,nitro+3);toast('NEAR MISS · +75');spawnFx(rideRoot.position.clone().add(new THREE.Vector3(0,1,0)),0xffcf63,5,1.8)}
+  if(d<1.95){
+   h.active=false;h.mesh.visible=false;spawnFx(rideRoot.position.clone().add(new THREE.Vector3(0,.8,0)),0xff9d48,10,3);
+   if(shieldTimer>0){shieldTimer=0;score+=120;toast('SHIELD ABSORBED IMPACT');sound(650,.12)}
+   else{perfectLap=false;impactSlowdown=1.5;speedScale=.42;velocity*=.62;speed=velocity*4.1;boosting=false;nitro=Math.max(0,nitro-5);toast('BARRIER HIT · SPEED REDUCED');sound(180,.16)}
+  }
+ }
+ for(const p of powerups){
+  if(!p.active)continue;p.mesh.rotation.y+=dt*1.7;p.mesh.position.y=p.baseY+Math.sin(now*.003+p.baseY)*.12;
+  if(Math.hypot(rideRoot.position.x-p.mesh.position.x,rideRoot.position.z-p.mesh.position.z)<1.8){
+   p.active=false;p.mesh.visible=false;score+=100;spawnFx(rideRoot.position.clone().add(new THREE.Vector3(0,1.2,0)),p.type==='magnet'?0xff65d6:p.type==='shield'?0x60e9ff:0xffb33e,9,2.3);
+   if(p.type==='shield'){shieldTimer=8;toast('SHIELD PICKUP · 8s')}
+   if(p.type==='magnet'){magnetTimer=10;toast('COIN MAGNET · 10s')}
+   if(p.type==='overdrive'){overdriveTimer=6;velocity+=5;toast('OVERDRIVE · 6s')}
+   sound(720,.13);
+  }
+ }
+ for(const pad of boostPads){
+  if(!pad.active)continue;
+  if(Math.hypot(rideRoot.position.x-pad.mesh.position.x,rideRoot.position.z-pad.mesh.position.z)<1.9){
+   pad.active=false;pad.mesh.visible=false;velocity+=6;nitro=Math.min(100,nitro+18);score+=150;toast('TURBO PAD · +NITRO');spawnFx(rideRoot.position.clone().add(new THREE.Vector3(0,.6,0)),0x26e6ff,12,3);sound(820,.13);
+  }
+ }
+ for(const o of opponents){
+  if(!o.root.visible)continue;const d=Math.hypot(rideRoot.position.x-o.root.position.x,rideRoot.position.z-o.root.position.z);
+  if(d>1.7&&d<3.35&&!o.nearMissed){o.nearMissed=true;score+=110;nitro=Math.min(100,nitro+3);toast('RIVAL NEAR MISS · +110');spawnFx(rideRoot.position.clone().add(new THREE.Vector3(0,.8,0)),0x70d9ff,5,1.8)}
+  if(d<1.58&&o.collisionCooldown<=0){o.collisionCooldown=1.25;perfectLap=false;velocity*=.76;impactSlowdown=Math.max(impactSlowdown,.55);spawnFx(rideRoot.position.clone().add(new THREE.Vector3(0,.8,0)),0xffc25e,7,2.2);toast('RIVAL CONTACT');sound(220,.09)}
+ }
+ const currentLap=Math.floor(playerDist/trackLength);
+ if(currentLap>lap){
+  const completedLapMs=now-lapStartTime;lap=currentLap;
+  if(!profile.bestLapMs||completedLapMs<profile.bestLapMs){profile.bestLapMs=Math.floor(completedLapMs);save();toast('PERSONAL BEST LAP!');sound(920,.2)}
+  if(perfectLap){profile.coins+=25;score+=200;toast('CLEAN LAP · +25 COINS');if(dailyChallenge.id==='clean')recordChallengeProgress('clean',1);save()}
+  else toast('LAP '+Math.min(lap,totalLaps)+' COMPLETE');
+  lapStartTime=now;currentLapTime=0;perfectLap=true;
+  if(lap>=totalLaps){finish();return}
+  coins.forEach(o=>{o.active=true;o.nearMissed=false;o.mesh.visible=true});hazards.forEach(o=>{o.active=true;o.nearMissed=false;o.mesh.visible=true});
+  powerups.forEach(o=>{o.active=true;o.mesh.visible=true});boostPads.forEach(o=>{o.active=true;o.mesh.visible=true});
+  opponents.forEach(o=>o.nearMissed=false);
+ }
+ const s=sampleAt(playerDist);rideRoot.position.set(s.point.x,.22,s.point.z);orientRide(s);
+ let cam,target;
+ if(cameraMode===1){cam=rideRoot.localToWorld(new THREE.Vector3(0,activeRide.kind==='bike'?2.45:2.05,-.45));target=rideRoot.localToWorld(new THREE.Vector3(0,1,-12));}
+ else{cam=s.point.clone().addScaledVector(s.tangent,cameraMode===2?-22:-16);cam.y=cameraMode===2?10.5:(activeRide.kind==='bike'?7.2:7.8);target=s.pos.clone().addScaledVector(s.tangent,cameraMode===2?8:3.8)}
+ camera.position.lerp(cam,cameraMode===1?.22:.13);camera.lookAt(target.x,target.y||1.1,target.z);
+ updateHud();if(toastTimer>0){toastTimer-=dt;if(toastTimer<=0)$('toast').classList.remove('show')}
+}
 $('pause').onclick=()=>{if(state==='racing'||state==='paused')pauseGame()};$('restart').onclick=start;hold('drift','shift');$('sound').onclick=()=>{$('sound').textContent=soundOn?'♫ SOUND OFF':'♫ SOUND ON';soundOn=!soundOn;if(soundOn)sound()};$('tracks').onclick=()=>openPanel(trackShop);$('garage').onclick=()=>openPanel(garageView);$('upgrades').onclick=()=>openPanel(upgradesView);$('leagues').onclick=()=>openPanel(leagueView);
 function hold(id,key){const el=$(id),down=e=>{e.preventDefault();keys.add(key);el.classList.add('active')},up=e=>{e.preventDefault();keys.delete(key);el.classList.remove('active')};el.addEventListener('pointerdown',down);el.addEventListener('pointerup',up);el.addEventListener('pointercancel',up);el.addEventListener('pointerleave',up)}
 hold('left','ArrowLeft');hold('right','ArrowRight');hold('throttle','w');hold('brake','s');hold('boost','boost');document.addEventListener('keydown',e=>{if(['ArrowLeft','ArrowRight','ArrowDown',' '].includes(e.key))e.preventDefault();keys.add(e.key);if(e.repeat)return;if(e.key==='Enter'&&(state==='menu'||state==='finished'))start();if(['p','P','Escape'].includes(e.key)&&(state==='racing'||state==='paused'))pauseGame()});document.addEventListener('keyup',e=>keys.delete(e.key));window.addEventListener('blur',()=>{keys.clear();if(state==='racing')pauseGame()});canvas.addEventListener('pointerdown',e=>{if(state!=='racing')return;const r=canvas.getBoundingClientRect();keys.add((e.clientX-r.left)<r.width/2?'ArrowLeft':'ArrowRight');canvas.setPointerCapture(e.pointerId)});canvas.addEventListener('pointerup',()=>{keys.delete('ArrowLeft');keys.delete('ArrowRight')});canvas.addEventListener('pointercancel',()=>{keys.delete('ArrowLeft');keys.delete('ArrowRight')});
