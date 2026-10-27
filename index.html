@@ -25,14 +25,14 @@ const THREE=window.THREE;
 const VISUAL_ASSETS={
  hdri:'https://dl.polyhaven.org/file/ph-assets/HDRIs/hdr/1k/venice_sunset_1k.hdr',
  asphalt:{
-  map:'https://dl.polyhaven.org/file/ph-assets/Textures/jpg/1k/asphalt_03/asphalt_03_diff_1k.jpg',
-  normal:'https://dl.polyhaven.org/file/ph-assets/Textures/jpg/1k/asphalt_03/asphalt_03_nor_gl_1k.jpg',
-  rough:'https://dl.polyhaven.org/file/ph-assets/Textures/jpg/1k/asphalt_03/asphalt_03_rough_1k.jpg'
+  map:'https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/asphalt_03/asphalt_03_diff_1k.jpg',
+  normal:'https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/asphalt_03/asphalt_03_nor_gl_1k.jpg',
+  rough:'https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/asphalt_03/asphalt_03_rough_1k.jpg'
  },
  ground:{
-  map:'https://dl.polyhaven.org/file/ph-assets/Textures/jpg/1k/forest_ground_01/forest_ground_01_diff_1k.jpg',
-  normal:'https://dl.polyhaven.org/file/ph-assets/Textures/jpg/1k/forest_ground_01/forest_ground_01_nor_gl_1k.jpg',
-  rough:'https://dl.polyhaven.org/file/ph-assets/Textures/jpg/1k/forest_ground_01/forest_ground_01_rough_1k.jpg'
+  map:'https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/forrest_ground_01/forrest_ground_01_diff_1k.jpg',
+  normal:'https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/forrest_ground_01/forrest_ground_01_nor_gl_1k.jpg',
+  rough:'https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/forrest_ground_01/forrest_ground_01_rough_1k.jpg'
  }
 };
 let highQualityTextures=null,highQualityEnvironment=null;
@@ -65,9 +65,12 @@ function loadHighQualityTextures(){
    if(colorMap)texture.encoding=THREE.sRGBEncoding;
    return texture;
   };
+  const roadSet={map:prepare(roadMap,true),normal:prepare(roadNormal),rough:prepare(roadRough)};
+  const cloneSet=set=>{const copy={map:set.map?set.map.clone():null,normal:set.normal?set.normal.clone():null,rough:set.rough?set.rough.clone():null};Object.values(copy).forEach(texture=>{if(texture)texture.needsUpdate=true});return copy};
   highQualityTextures={
-   asphalt:{map:prepare(roadMap,true),normal:prepare(roadNormal),rough:prepare(roadRough)},
-   ground:{map:prepare(groundMap,true),normal:prepare(groundNormal),rough:prepare(groundRough)}
+   asphalt:roadSet,
+   ground:{map:prepare(groundMap,true),normal:prepare(groundNormal),rough:prepare(groundRough)},
+   urbanGround:cloneSet(roadSet)
   };
   applyHighQualityTextures();
  }).catch(error=>console.warn('PBR texture loading failed; keeping procedural materials.',error));
@@ -85,9 +88,10 @@ function applyHighQualityTextures(){
    m.needsUpdate=true;
   }
   if(object.userData.pbrGround&&highQualityTextures.ground.map){
-   const m=object.material,t=highQualityTextures.ground;
-   [t.map,t.normal,t.rough].forEach(texture=>{if(texture)texture.repeat.set(28,28)});
-   m.map=t.map;m.normalMap=t.normal;m.roughnessMap=t.rough;m.color.set(0xc1c0b6);
+   const m=object.material,urban=activeTrack.shape==='city'||activeTrack.shape==='gp';
+   const t=urban?highQualityTextures.urbanGround:highQualityTextures.ground;
+   [t.map,t.normal,t.rough].forEach(texture=>{if(texture)texture.repeat.set(urban?28:20,urban?28:20)});
+   m.map=t.map;m.normalMap=t.normal;m.roughnessMap=t.rough;m.color.set(urban?0xb5b5b5:0xc1c0b6);
    m.roughness=.98;m.metalness=0;
    if(m.normalScale)m.normalScale.set(.9,.9);
    m.needsUpdate=true;
